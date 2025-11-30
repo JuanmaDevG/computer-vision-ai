@@ -9,9 +9,11 @@ import keras
 from keras import layers
 from keras.datasets import cifar10
 from keras.utils import to_categorical
+from keras import regularizers
 
 import numpy as np
 import pandas
+import time
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
@@ -126,7 +128,36 @@ def gfx_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, labels: Optiona
     plt.show()
 
 
-def probar_mlp(X_train: np.ndarray, Y_train: np.ndarray,
+def make_new_mlp(input_dim: int,
+                  hidden_layers: List[int],
+                  activation: str = 'sigmoid',
+                  output_units: int = 10,
+                  output_activation: str = 'softmax',
+                  kernel_initializer: str = 'glorot_uniform',
+                  l2_reg: float = 0.0,
+                  dropout: float = 0.0,
+                  use_batchnorm: bool = False) -> keras.models.Model:
+    model = keras.models.Sequential()
+    model.add(layers.InputLayer(input_shape=(input_dim,)))
+    for i, units in enumerate(hidden_layers):
+        if l2_reg > 0:
+            reg = regularizers.l2(l2_reg)
+        else:
+            reg = None
+        model.add(layers.Dense(units,
+                               activation=activation,
+                               kernel_initializer=kernel_initializer,
+                               kernel_regularizer=reg,
+                               name=f"dense_{i+1}"))
+        if use_batchnorm:
+            model.add(layers.BatchNormalization())
+        if dropout and dropout > 0.0:
+            model.add(layers.Dropout(dropout))
+    model.add(layers.Dense(output_units, activation=output_activation))
+    return model
+
+
+def try_mlp(X_train: np.ndarray, Y_train: np.ndarray,
                X_test: np.ndarray, Y_test: np.ndarray,
                hidden_layers: List[int] = [48],
                activation: str = 'sigmoid',
@@ -141,7 +172,6 @@ def probar_mlp(X_train: np.ndarray, Y_train: np.ndarray,
                repetitions: int = 1,
                verbose: int = 1
                ) -> Dict[str, Any]:
-    input_dim = X_train.shape[1]
     results = {
         'models': [],
         'histories': [],
@@ -150,20 +180,20 @@ def probar_mlp(X_train: np.ndarray, Y_train: np.ndarray,
     }
 
     for rep in range(repetitions):
-        model = construir_mlp(input_dim=input_dim,
+        model = make_new_mlp(input_dim=X_train.shape[1],
                               hidden_layers=hidden_layers,
                               activation=activation,
                               kernel_initializer=kernel_initializer,
                               l2_reg=l2_reg,
                               dropout=dropout,
                               use_batchnorm=use_batchnorm)
-        model.compile(optimizer=optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+        model.compile(optimizer=keras.optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
         if verbose:
             model.summary()
 
         cb = []
         if use_earlystopping:
-            cb.append(callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True, verbose=0))
+            cb.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True, verbose=0))
 
         t0 = time.time()
         history = model.fit(X_train, Y_train, validation_split=0.1, epochs=epochs,
@@ -178,8 +208,6 @@ def probar_mlp(X_train: np.ndarray, Y_train: np.ndarray,
         results['test_scores'].append((test_loss, test_acc))
         results['times'].append(elapsed)
 
-        # si haces muchas repeticiones puede ser útil liberar GPU memory entre repes (si procede)
-    # promedios
     avg_loss = float(np.mean([s[0] for s in results['test_scores']]))
     avg_acc  = float(np.mean([s[1] for s in results['test_scores']]))
     avg_time = float(np.mean(results['times']))
@@ -199,29 +227,63 @@ def probar_mlp(X_train: np.ndarray, Y_train: np.ndarray,
 # Tareas expuestas en el enunciado #
 ####################################
 
-def tareaMLP1(epochs: int = 10) -> keras.models.Model:
+def tareaMLP1() -> keras.models.Model:
     X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
-    res = probar_mlp(X_train, Y_train, X_test, Y_test,
-                     hidden_layers=[48],
-                     activation='sigmoid',
-                     batch_size=32,
-                     epochs=epochs,
-                     use_earlystopping=False,  # tal y como pide el enunciado inicialmente
-                     repetitions=1,
-                     verbose=2)
+    model = keras.models.Sequential([
+        layers.InputLayer(shape=(X_train.shape[1],)),
+        layers.Dense(48, activation='sigmoid'),
+        layers.Dense(10, activation='softmax')
+        ])
 
-    gfx_loss_evolution_and_success_rate(res['histories'][-1], title="MLP1 - evolución")
-    return res['models'][-1]
+    model.compile(optimizer=keras.optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    model.summary()
+
+    # 10% validation split to watch loss and accuracy evolution per epoch
+    t = time.time()
+    history = model.fit(X_train, Y_train, validation_split=0.1, batch_size=32, epochs=10).history
+    t = time.time() - t
+    test_loss, test_accuracy = model.evaluate(X_test, Y_test, verbose=0)
+
+    data = {
+            'time': t,
+            'accuracy': history['accuracy'],
+            'loss': history['loss'],
+            'val_accuracy': history['val_accuracy'],
+            'val_loss': history['val_loss'],
+            'avg_loss': test_loss,
+            'avg_accuracy': test_accuracy
+            }
+
+    epochs = range(1, len(history['loss']) +1)
+    plt.title('Tarea MLP 1: graphically comparing attribtues')
+    fig, ax_acc = plt.subplots()
+
+    fig.text(0.05, 1.0, f"Average accuracy: {data['avg_accuracy'] * 100:.0f}%", ha='left', va='top', fontsize=12, color='green')
+    fig.text(0.05, 0.95, f"Average loss: {data['avg_loss']:.2f}", ha='left', va='top', fontsize=12, color='red')
+
+    ax_acc.set_xlabel('Epoch')
+    ax_acc.set_ylabel('Accuracy')
+    ax_acc.plot(epochs, data['accuracy'], label='Trainig accuracy', color='green')
+    ax_acc.plot(epochs, data['val_accuracy'], label='Validation accuracy', color='black')
+    ax_acc.legend(loc='lower left')
+
+    ax_loss = ax_acc.twinx()
+    ax_loss.set_ylabel('Loss')
+    ax_loss.plot(epochs, data['loss'], label='Training loss', color='blue')
+    ax_loss.plot(epochs, data['val_loss'], label='Validation loss', color='red')
+    ax_loss.legend(loc='upper left')
+
+    plt.savefig('MLP_tarea1.png', dpi=150, bbox_inches='tight')
+    return model
 
 
 def tareaMLP2(epochs_list: List[int] = [5, 10, 20], repetitions: int = 3):
     X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
     results = []
     for e in epochs_list:
-        res = probar_mlp(X_train, Y_train, X_test, Y_test,
+        res = try_mlp(X_train, Y_train, X_test, Y_test,
                          hidden_layers=[48],
                          activation='sigmoid',
-                         batch_size=32,
                          epochs=e,
                          use_earlystopping=True,
                          patience=5,
@@ -238,7 +300,7 @@ def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3):
     results = []
     for b in batch_sizes:
         print(f"\nRight now batch_size = {b}")
-        res = probar_mlp(X_train, Y_train, X_test, Y_test,
+        res = try_mlp(X_train, Y_train, X_test, Y_test,
                          hidden_layers=[48],
                          activation='sigmoid',
                          batch_size=b,
@@ -265,11 +327,10 @@ def tareaMLP4(activations_and_inits: Optional[List[Dict[str, str]]] = None, repe
     for cfg in activations_and_inits:
         label = f"{cfg['activation']}_{cfg['initializer']}"
         print(f"\nNow trying {label}")
-        res = probar_mlp(X_train, Y_train, X_test, Y_test,
+        res = try_mlp(X_train, Y_train, X_test, Y_test,
                          hidden_layers=[48],
                          activation=cfg['activation'],
                          kernel_initializer=cfg['initializer'],
-                         batch_size=32,
                          epochs=20,
                          use_earlystopping=True,
                          patience=5,
@@ -285,11 +346,10 @@ def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96], repetitions: int 
     results = []
     for n in neuron_counts:
         print(f"\nTrying {n} neurons")
-        res = probar_mlp(X_train, Y_train, X_test, Y_test,
+        res = try_mlp(X_train, Y_train, X_test, Y_test,
                          hidden_layers=[n],
                          activation='relu',
                          kernel_initializer='he_normal',
-                         batch_size=32,
                          epochs=20,
                          use_earlystopping=True,
                          patience=5,
@@ -308,11 +368,10 @@ def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3):
     for cfg in configs:
         label = "+".join(map(str, cfg))
         print(f"\nProbando capas {label}")
-        res = probar_mlp(X_train, Y_train, X_test, Y_test,
+        res = try_mlp(X_train, Y_train, X_test, Y_test,
                          hidden_layers=cfg,
                          activation='relu',
                          kernel_initializer='he_normal',
-                         batch_size=32,
                          epochs=30,
                          use_earlystopping=True,
                          patience=6,
@@ -339,7 +398,7 @@ def tareaMLP7(repetitions: int = 3):
     for c in candidates:
         label = f"{'+'.join(map(str,c['hidden']))}_act-{c['activation']}_do-{c['dropout']}_l2-{c['l2']}"
         print(f"\nProbando candidate: {label}")
-        res = probar_mlp(X_train, Y_train, X_test, Y_test,
+        res = try_mlp(X_train, Y_train, X_test, Y_test,
                          hidden_layers=c['hidden'],
                          activation=c['activation'],
                          kernel_initializer=c['init'],
