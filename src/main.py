@@ -440,7 +440,7 @@ if __name__ == "__main__":
 
     # Primera parte, tareas con MLP
     MLP = tareaMLP1()
-    MLP = tareaMLP2()
+    #MLP = tareaMLP2()
     #MLP = tareaMLP3()
     #MLP = tareaMLP4()
     #MLP = tareaMLP5()
