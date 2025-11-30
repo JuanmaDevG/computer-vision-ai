@@ -70,7 +70,7 @@ def preprocess_cifar10_cnn() -> tuple[np.ndarray]:
     return X_train, Y_train, X_test, Y_test
 
 
-def gfx_loss_evolution_and_success_rate(history: Dict[str, List[float]], title: str = "Evolución entrenamiento"):
+def gfx_loss_evolution_and_success_rate(history: Dict[str, List[float]], title: str = "Evolución entrenamiento", filename='default.png'):
     h = history
     epochs = range(1, len(h['loss']) + 1)
 
@@ -91,10 +91,10 @@ def gfx_loss_evolution_and_success_rate(history: Dict[str, List[float]], title: 
     ax2.legend(loc='lower right')
 
     plt.title(title)
-    plt.show()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
 
 
-def gfx_bars_training_time_and_final_success_rate(history: Dict[str, List[float]], title: str = "Evolución entrenamiento"):
+def gfx_bars_training_time_and_final_success_rate(history: Dict[str, List[float]], title: str = "Evolución entrenamiento", filename='default.png'):
     labels = [r['label'] for r in results]
     times  = [r['time'] for r in results]
     accs   = [r['test_acc'] for r in results]
@@ -116,7 +116,7 @@ def gfx_bars_training_time_and_final_success_rate(history: Dict[str, List[float]
     ax2.set_title('Accuracies finales (test)')
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
 
 
 def gfx_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, labels: Optional[List[str]] = None, title: str = "Matriz de confusión"):
@@ -125,7 +125,7 @@ def gfx_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, labels: Optiona
     fig, ax = plt.subplots(figsize=(8, 8))
     disp.plot(ax=ax, xticks_rotation='vertical', cmap=plt.cm.Blues)
     plt.title(title)
-    plt.show()
+    plt.savefig(filename, dpi=150, bbox_inches='tight')
 
 
 def make_new_mlp(input_dim: int,
@@ -290,8 +290,8 @@ def tareaMLP2(epochs_list: List[int] = [5, 10, 20], repetitions: int = 3):
                          repetitions=repetitions,
                          verbose=0)
         results.append({'label': f"epochs_{e}", 'time': res['avg_time'], 'test_acc': res['avg_test_acc'], 'histories': res['histories']})
-        gfx_loss_evolution_and_success_rate(res['histories'][0], title=f"epochs={e}")
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste epochs")
+        gfx_loss_evolution_and_success_rate(res['histories'][0], title=f"epochs={e}", filename=f"MLP_tarea2_epoch_{e}.png")
+    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste epochs", filename='MLP_tarea2_ajuste_epochs.png')
     return results
 
 
@@ -310,7 +310,7 @@ def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3):
                          repetitions=repetitions,
                          verbose=0)
         results.append({'label': f"bs_{b}", 'time': res['avg_time'], 'test_acc': res['avg_test_acc']})
-    grafica_de_barras_con_tiempo_de_entrenamiento_y_tasas_de_acierto(results, title="MLP - ajuste batch_size")
+    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste batch_size", filename='MLP_tarea3_ajuste_batch_size.png')
     return results
 
 
@@ -337,7 +337,7 @@ def tareaMLP4(activations_and_inits: Optional[List[Dict[str, str]]] = None, repe
                          repetitions=repetitions,
                          verbose=0)
         results.append({'label': label, 'time': res['avg_time'], 'test_acc': res['avg_test_acc'], 'histories': res['histories']})
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - activacion / inicializador")
+    gfx_bars_training_time_and_final_success_rate(results, title="MLP - activacion / inicializador", filename='MLP_tarea4_activacion_inicializador.png')
     return results
 
 
@@ -356,7 +356,7 @@ def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96], repetitions: int 
                          repetitions=repetitions,
                          verbose=0)
         results.append({'label': f"{n}n", 'time': res['avg_time'], 'test_acc': res['avg_test_acc']})
-    grafica_de_barras_con_tiempo_de_entrenamiento_y_tasas_de_acierto(results, title="MLP - ajuste nº neuronas")
+    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste nº neuronas", filename='MLP_tarea5_ajuste_de_neuronas.png')
     return results
 
 
@@ -378,7 +378,7 @@ def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3):
                          repetitions=repetitions,
                          verbose=0)
         results.append({'label': label, 'time': res['avg_time'], 'test_acc': res['avg_test_acc']})
-    grafica_de_barras_con_tiempo_de_entrenamiento_y_tasas_de_acierto(results, title="MLP - capas y distribución neuronas")
+    gfx_bars_training_time_and_final_success_rate(results, title="MLP - capas y distribución neuronas", filename='MLP_tarea6_capas_y_neuronas.png')
     return results
 
 
@@ -414,7 +414,7 @@ def tareaMLP7(repetitions: int = 3):
         results.append({'label': label, 'time': res['avg_time'], 'test_acc': res['avg_test_acc'], 'raw': res})
 
     results = sorted(results, key=lambda r: r['test_acc'], reverse=True)
-    grafica_de_barras_con_tiempo_de_entrenamiento_y_tasas_de_acierto(results, title="MLP7 - Optimización final")
+    gfx_bars_training_time_and_final_success_rate(results, title="MLP7 - Optimización final", filename='MLP_tarea7_optimizacion_final.png')
 
     best = results[0]
     best_model = best['raw']['models'][0]
@@ -440,7 +440,7 @@ if __name__ == "__main__":
 
     # Primera parte, tareas con MLP
     MLP = tareaMLP1()
-    #MLP = tareaMLP2()
+    MLP = tareaMLP2()
     #MLP = tareaMLP3()
     #MLP = tareaMLP4()
     #MLP = tareaMLP5()
