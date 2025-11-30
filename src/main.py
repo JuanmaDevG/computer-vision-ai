@@ -258,19 +258,19 @@ def tareaMLP1() -> keras.models.Model:
     plt.title('Tarea MLP 1: graphically comparing attribtues')
     fig, ax_acc = plt.subplots()
 
-    fig.text(0.05, 1.0, f"Average accuracy: {data['avg_accuracy'] * 100:.0f}%", ha='left', va='top', fontsize=12, color='green')
-    fig.text(0.05, 0.95, f"Average loss: {data['avg_loss']:.2f}", ha='left', va='top', fontsize=12, color='red')
+    fig.text(0.05, 1.0, f"Evaluated accuracy: {data['avg_accuracy'] * 100:.0f}%", ha='left', va='top', fontsize=12, color='green')
+    fig.text(0.05, 0.95, f"Evaluated loss: {data['avg_loss']:.2f}", ha='left', va='top', fontsize=12, color='red')
 
     ax_acc.set_xlabel('Epoch')
     ax_acc.set_ylabel('Accuracy')
     ax_acc.plot(epochs, data['accuracy'], label='Trainig accuracy', color='green')
-    ax_acc.plot(epochs, data['val_accuracy'], label='Validation accuracy', color='black')
+    ax_acc.plot(epochs, data['val_accuracy'], label='Validation accuracy', color='green', linestyle='--')
     ax_acc.legend(loc='lower left')
 
     ax_loss = ax_acc.twinx()
     ax_loss.set_ylabel('Loss')
-    ax_loss.plot(epochs, data['loss'], label='Training loss', color='blue')
-    ax_loss.plot(epochs, data['val_loss'], label='Validation loss', color='red')
+    ax_loss.plot(epochs, data['loss'], label='Training loss', color='red')
+    ax_loss.plot(epochs, data['val_loss'], label='Validation loss', color='red', linestyle='--')
     ax_loss.legend(loc='upper left')
 
     plt.savefig('MLP_tarea1.png', dpi=150, bbox_inches='tight')
