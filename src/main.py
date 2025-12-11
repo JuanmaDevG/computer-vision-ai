@@ -138,7 +138,7 @@ def make_new_mlp(input_dim: int,
                   dropout: float = 0.0,
                   use_batchnorm: bool = False) -> keras.models.Model:
     model = keras.models.Sequential()
-    model.add(layers.InputLayer(input_shape=(input_dim,)))
+    model.add(layers.InputLayer(shape=(input_dim,)))
     for i, units in enumerate(hidden_layers):
         if l2_reg > 0:
             reg = regularizers.l2(l2_reg)
@@ -155,6 +155,10 @@ def make_new_mlp(input_dim: int,
             model.add(layers.Dropout(dropout))
     model.add(layers.Dense(output_units, activation=output_activation))
     return model
+
+
+def make_mlp() -> keras.models.Model:
+    pass
 
 
 def try_mlp(X_train: np.ndarray, Y_train: np.ndarray,
@@ -439,15 +443,15 @@ if __name__ == "__main__":
     ############################################################
 
     # Primera parte, tareas con MLP
-    MLP = tareaMLP1()
-    #MLP = tareaMLP2()
+    #MLP = tareaMLP1()
+    MLP = tareaMLP2()
     #MLP = tareaMLP3()
     #MLP = tareaMLP4()
     #MLP = tareaMLP5()
     #MLP = tareaMLP6()
     #MLP = tareaMLP7()
 
-    # Tarea B
+    # Segunda parte, tareas CNN
     #CNN = funcionCNN1(...)
     #CNN = funcionCNN29(...)
 
