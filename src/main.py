@@ -128,18 +128,15 @@ def gfx_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, labels: Optiona
     plt.savefig(filename, dpi=150, bbox_inches='tight')
 
 
-def make_new_mlp(input_dim: int,
-                  hidden_layers: List[int],
-                  activation: str = 'sigmoid',
-                  output_units: int = 10,
-                  output_activation: str = 'softmax',
-                  kernel_initializer: str = 'glorot_uniform',
-                  l2_reg: float = 0.0,
-                  dropout: float = 0.0,
-                  use_batchnorm: bool = False) -> keras.models.Model:
+def make_mlp(hidden_layers: List[int],
+              activation: str = 'sigmoid',
+              kernel_initializer: str = 'glorot_uniform',
+              l2_reg: float = 0.0,
+              dropout: float = 0.0,
+              use_batchnorm: bool = False) -> keras.models.Model:
     model = keras.models.Sequential()
-    model.add(layers.InputLayer(shape=(input_dim,)))
-    for i, units in enumerate(hidden_layers):
+    model.add(layers.InputLayer(shape=(make_mlp.input_dim,)))
+    for units in hidden_layers:
         if l2_reg > 0:
             reg = regularizers.l2(l2_reg)
         else:
@@ -147,20 +144,17 @@ def make_new_mlp(input_dim: int,
         model.add(layers.Dense(units,
                                activation=activation,
                                kernel_initializer=kernel_initializer,
-                               kernel_regularizer=reg,
-                               name=f"dense_{i+1}"))
+                               kernel_regularizer=reg))
         if use_batchnorm:
             model.add(layers.BatchNormalization())
         if dropout and dropout > 0.0:
             model.add(layers.Dropout(dropout))
-    model.add(layers.Dense(output_units, activation=output_activation))
+    model.add(layers.Dense(make_mlp.output_units, activation=make_mlp.out_activation_func))
+    model.compile(optimizer=keras.optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
 
-def make_mlp() -> keras.models.Model:
-    pass
-
-
+#TODO: deeply modify this function
 def try_mlp(X_train: np.ndarray, Y_train: np.ndarray,
                X_test: np.ndarray, Y_test: np.ndarray,
                hidden_layers: List[int] = [48],
@@ -184,7 +178,7 @@ def try_mlp(X_train: np.ndarray, Y_train: np.ndarray,
     }
 
     for rep in range(repetitions):
-        model = make_new_mlp(input_dim=X_train.shape[1],
+        model = make_mlp(input_dim=X_train.shape[1],
                               hidden_layers=hidden_layers,
                               activation=activation,
                               kernel_initializer=kernel_initializer,
@@ -435,6 +429,11 @@ def tareaMLP7(repetitions: int = 3):
 
 
 if __name__ == "__main__":
+    # Helper functions attribute names
+    make_mlp.input_dim = 32 * 32 * 3
+    make_mlp.output_units = 10                  # Equivalent to the number of classes
+    make_mlp.out_activation_func = 'softmax'
+
     # Tool testing (uncomment to use)
     ############################################################
     #(X_train, Y_train), (X_test, Y_test) = loadprint_cifar10()
