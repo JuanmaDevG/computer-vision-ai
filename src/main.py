@@ -155,21 +155,22 @@ def make_mlp(hidden_layers: List[int],
 
 
 #TODO: deeply modify this function
-def try_mlp(X_train: np.ndarray, Y_train: np.ndarray,
-               X_test: np.ndarray, Y_test: np.ndarray,
-               hidden_layers: List[int] = [48],
-               activation: str = 'sigmoid',
-               kernel_initializer: str = 'glorot_uniform',
-               batch_size: int = 32,
-               epochs: int = 10,
-               use_earlystopping: bool = True,
-               patience: int = 5,
-               l2_reg: float = 0.0,
-               dropout: float = 0.0,
-               use_batchnorm: bool = False,
-               repetitions: int = 1,
-               verbose: int = 1
-               ) -> Dict[str, Any]:
+def try_mlp(model: keras.models.Model,
+            X_train: np.ndarray, Y_train: np.ndarray,
+            X_test: np.ndarray, Y_test: np.ndarray,
+            hidden_layers: List[int] = [48],
+            activation: str = 'sigmoid',
+            kernel_initializer: str = 'glorot_uniform',
+            batch_size: int = 32,
+            epochs: int = 10,
+            use_earlystopping: bool = True,
+            patience: int = 5,
+            l2_reg: float = 0.0,
+            dropout: float = 0.0,
+            use_batchnorm: bool = False,
+            repetitions: int = 1,
+            verbose: int = 1
+            ) -> Dict[str, Any]: #TODO: refactor return type if necessary
     results = {
         'models': [],
         'histories': [],
