@@ -1,4 +1,4 @@
-import logging, os
+import logging, os, sys
 logging.disable(logging.WARNING)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -154,13 +154,10 @@ def make_mlp(hidden_layers: List[int],
     return model
 
 
-#TODO: deeply modify this function
+#TODO: delete this function and all gfx functions, but for now it serves as concepts to learn (but bullshit)
 def try_mlp(model: keras.models.Model,
             X_train: np.ndarray, Y_train: np.ndarray,
             X_test: np.ndarray, Y_test: np.ndarray,
-            hidden_layers: List[int] = [48],
-            activation: str = 'sigmoid',
-            kernel_initializer: str = 'glorot_uniform',
             batch_size: int = 32,
             epochs: int = 10,
             use_earlystopping: bool = True,
@@ -179,14 +176,6 @@ def try_mlp(model: keras.models.Model,
     }
 
     for rep in range(repetitions):
-        model = make_mlp(input_dim=X_train.shape[1],
-                              hidden_layers=hidden_layers,
-                              activation=activation,
-                              kernel_initializer=kernel_initializer,
-                              l2_reg=l2_reg,
-                              dropout=dropout,
-                              use_batchnorm=use_batchnorm)
-        model.compile(optimizer=keras.optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
         if verbose:
             model.summary()
 
@@ -276,22 +265,46 @@ def tareaMLP1() -> keras.models.Model:
     return model
 
 
-def tareaMLP2(epochs_list: List[int] = [5, 10, 20], repetitions: int = 3):
+def tareaMLP2():
+    orig_stdout = sys.stdout
+    sys.stdout = open("tareaMLP2.log", "w")
+
+    epochs_list = [5, 7, 10, 15, 20]
+    colors = ['black', 'blue', 'green', 'yellow', 'red']
     X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
-    results = []
-    for e in epochs_list:
-        res = try_mlp(X_train, Y_train, X_test, Y_test,
-                         hidden_layers=[48],
-                         activation='sigmoid',
-                         epochs=e,
-                         use_earlystopping=True,
-                         patience=5,
-                         repetitions=repetitions,
-                         verbose=0)
-        results.append({'label': f"epochs_{e}", 'time': res['avg_time'], 'test_acc': res['avg_test_acc'], 'histories': res['histories']})
-        gfx_loss_evolution_and_success_rate(res['histories'][0], title=f"epochs={e}", filename=f"MLP_tarea2_epoch_{e}.png")
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste epochs", filename='MLP_tarea2_ajuste_epochs.png')
-    return results
+    plt.title("Tarea MLP 2: comparing different models development with different epochs")
+    fig, ax_accuracy = plt.subplots()
+    ac_accuracy.set_xlabel('Epoch')
+    ac_accuracy.set_ylabel('Accuracy')
+    ax_loss = plt.twinx()
+    ax_loss.set_ylabel('Loss')
+
+    for i, e in enumerate(epochs_list):
+        model = make_mlp([48])
+        t = time.time()
+        history = model.fit(X_train, Y_train, validation_split=0.1, batch_size=32, epochs=e).history
+        t = time.time() - t
+        avg_loss, avg_accuracy = model.evaluate(X_test, Y_test, verbose=0)
+
+        print((
+            f"MLP {i} training info:\n"
+            f"- time: {t / 1000} seconds\n"
+            f"- epochs: {e}\n"
+            f"- average accuracy: {avg_accuracy}\n"
+            f"- averate loss: {avg_loss}\n"))
+
+        gaphics_data = {
+            'training accuracy': history['accuracy'],
+            'training loss': history['loss'],
+            'validation accuracy': history['val_accuracy'],
+            'validation loss': history['val_loss'],
+            }
+
+        ax_accuracy.plot(e, history['accuracy'], label=f"Training accuracy ({e} epochs)", color=colors[i])
+        ax_accuracy.plot(e, history['val_accuracy'], label=f"Validation accuracy ({e} epochs)", color=colors[i], linestyle='--')
+        ax_loss.plot(e, history['loss'], label=f"Validation loss ({e} epochs)") #TODO: draw loss and accuracy in separated subplots but same image
+
+    sys.stdout = orig_stdout
 
 
 def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3):
