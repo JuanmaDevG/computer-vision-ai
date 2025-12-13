@@ -1,332 +1,255 @@
-import logging, os, sys
+import os
+import time
+from pathlib import Path
+from typing import List, Tuple, Dict, Any, Optional
+
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers, regularizers
+from tensorflow.keras.datasets import cifar10
+from tensorflow.keras.utils import to_categorical
+
+RESULTS_DIR = Path("results")
+RESULTS_DIR.mkdir(exist_ok=True)
+
+import logging, sys
 logging.disable(logging.WARNING)
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-from typing import Tuple, List, Optional, Any, Dict
 
-import matplotlib.pyplot as plt
-import keras
-from keras import layers
-from keras.datasets import cifar10
-from keras.utils import to_categorical
-from keras import regularizers
-
-import numpy as np
-import pandas
-import time
-
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+def save_figure(fig, filename: str):
+    path = RESULTS_DIR / filename
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
 
-###########################################################################################################
-# Tool testing functions
-###########################################################################################################
-def loadprint_cifar10() -> tuple[np.ndarray]:
+def ensure_reproducibility(seed: int = 42):
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+
+
+def load_preprocess_mlp() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     (X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
-    print(X_train.shape, X_train.dtype)
-    print(Y_train.shape, Y_train.dtype)
-    print(X_test.shape, X_test.dtype)
-    print(Y_test.shape, Y_test.dtype)
-    return X_train, Y_train, X_test, Y_test
-
-
-def draw_random_image(X_sample: np.ndarray, Y_sample: np.ndarray):
-    from random import randrange
-    idx = randrange(0, len(X_sample))
-    title = "Showing image X_sample[" + str(idx) + "] -- Y_sample[" + str(idx) + "] = " + str(Y_sample[idx])
-    img = X_sample[idx]
-
-    plt.figure()
-    plt.suptitle(title)
-    plt.imshow(img)
-    plt.show()
-
-
-def plot_sample_types(Y_sample: np.ndarray, xscale = 'linear', yscale = 'linear'):
-    plt.title("Etiquetas de una muestra de " + str(len(Y_sample)) + " valores")
-    plt.plot(Y_sample)
-    plt.xscale(xscale)
-    plt.yscale(yscale)
-    plt.show()
-###########################################################################################################
-###########################################################################################################
-
-
-def preprocess_cifar10_mlp() -> tuple[np.ndarray]:
-    (X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
-    X_train = X_train.astype('float32') / 255.0
-    X_test  = X_test.astype('float32') / 255.0
+    X_train = X_train.astype("float32") / 255.0
+    X_test = X_test.astype("float32") / 255.0
 
     X_train = X_train.reshape((X_train.shape[0], -1))
-    X_test  = X_test.reshape((X_test.shape[0], -1))
+    X_test = X_test.reshape((X_test.shape[0], -1))
 
     Y_train = to_categorical(Y_train, num_classes=10)
-    Y_test  = to_categorical(Y_test, num_classes=10)
-    return X_train, Y_train, X_test, Y_test
+    Y_test = to_categorical(Y_test, num_classes=10)
 
-def preprocess_cifar10_cnn() -> tuple[np.ndarray]:
-    (X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
-    #TODO: preprocessing work here
     return X_train, Y_train, X_test, Y_test
 
 
-def gfx_loss_evolution_and_success_rate(history: Dict[str, List[float]], title: str = "Evolución entrenamiento", filename='default.png'):
-    h = history
-    epochs = range(1, len(h['loss']) + 1)
-
-    fig, ax1 = plt.subplots()
-    ax1.set_xlabel('Época')
-    ax1.set_ylabel('Loss')
-    ax1.plot(epochs, h['loss'], label='train_loss', linestyle='-')
-    if 'val_loss' in h:
-        ax1.plot(epochs, h['val_loss'], label='val_loss', linestyle='--')
-    ax1.legend(loc='upper left')
-
-    ax2 = ax1.twinx()
-    ax2.set_ylabel('Accuracy')
-    if 'accuracy' in h:
-        ax2.plot(epochs, h['accuracy'], label='train_acc', linestyle='-')
-    if 'val_accuracy' in h:
-        ax2.plot(epochs, h['val_accuracy'], label='val_acc', linestyle='--')
-    ax2.legend(loc='lower right')
-
-    plt.title(title)
-    plt.savefig(filename, dpi=150, bbox_inches='tight')
+def load_preprocess_cnn() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    pass
 
 
-def gfx_bars_training_time_and_final_success_rate(history: Dict[str, List[float]], title: str = "Evolución entrenamiento", filename='default.png'):
-    labels = [r['label'] for r in results]
-    times  = [r['time'] for r in results]
-    accs   = [r['test_acc'] for r in results]
-
-    x = np.arange(len(labels))
-    width = 0.6
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
-    ax1.bar(x, times, width)
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(labels, rotation=45, ha='right')
-    ax1.set_ylabel('Tiempo (s)')
-    ax1.set_title('Tiempos de entrenamiento')
-
-    ax2.bar(x, accs, width)
-    ax2.set_xticks(x)
-    ax2.set_xticklabels(labels, rotation=45, ha='right')
-    ax2.set_ylabel('Test accuracy')
-    ax2.set_title('Accuracies finales (test)')
-
-    plt.tight_layout()
-    plt.savefig(filename, dpi=150, bbox_inches='tight')
-
-
-def gfx_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, labels: Optional[List[str]] = None, title: str = "Matriz de confusión"):
-    cm = confusion_matrix(y_true, y_pred)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
-    fig, ax = plt.subplots(figsize=(8, 8))
-    disp.plot(ax=ax, xticks_rotation='vertical', cmap=plt.cm.Blues)
-    plt.title(title)
-    plt.savefig(filename, dpi=150, bbox_inches='tight')
-
-
-def make_mlp(hidden_layers: List[int],
-              activation: str = 'sigmoid',
-              kernel_initializer: str = 'glorot_uniform',
+def build_mlp(input_dim: int,
+              output_units: int = 10,
+              hidden_layers: List[int] = [48],
+              activation: str = "sigmoid",
+              kernel_initializer: str = "glorot_uniform",
               l2_reg: float = 0.0,
               dropout: float = 0.0,
-              use_batchnorm: bool = False) -> keras.models.Model:
+              use_batchnorm: bool = False,
+              out_activation: str = "softmax") -> keras.models.Model:
     model = keras.models.Sequential()
-    model.add(layers.InputLayer(shape=(make_mlp.input_dim,)))
+    model.add(layers.InputLayer(shape=(input_dim,)))
     for units in hidden_layers:
-        if l2_reg > 0:
-            reg = regularizers.l2(l2_reg)
-        else:
-            reg = None
-        model.add(layers.Dense(units,
-                               activation=activation,
+        reg = regularizers.l2(l2_reg) if l2_reg and l2_reg > 0 else None
+        model.add(layers.Dense(units, activation=activation,
                                kernel_initializer=kernel_initializer,
                                kernel_regularizer=reg))
         if use_batchnorm:
             model.add(layers.BatchNormalization())
         if dropout and dropout > 0.0:
             model.add(layers.Dropout(dropout))
-    model.add(layers.Dense(make_mlp.output_units, activation=make_mlp.out_activation_func))
-    model.compile(optimizer=keras.optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    model.add(layers.Dense(output_units, activation=out_activation))
+    model.compile(optimizer=keras.optimizers.Adam(),
+                  loss="categorical_crossentropy",
+                  metrics=["accuracy"])
     return model
 
 
-#TODO: delete this function and all gfx functions, but for now it serves as concepts to learn (but bullshit)
-def try_mlp(model: keras.models.Model,
-            X_train: np.ndarray, Y_train: np.ndarray,
-            X_test: np.ndarray, Y_test: np.ndarray,
-            batch_size: int = 32,
-            epochs: int = 10,
-            use_earlystopping: bool = True,
-            patience: int = 5,
-            l2_reg: float = 0.0,
-            dropout: float = 0.0,
-            use_batchnorm: bool = False,
-            repetitions: int = 1,
-            verbose: int = 1
-            ) -> Dict[str, Any]: #TODO: refactor return type if necessary
-    results = {
-        'models': [],
-        'histories': [],
-        'test_scores': [],
-        'times': []
+def train_and_evaluate(model: keras.models.Model,
+                       X_train: np.ndarray, Y_train: np.ndarray,
+                       X_test: np.ndarray, Y_test: np.ndarray,
+                       epochs: int = 10,
+                       batch_size: int = 32,
+                       validation_split: float = 0.1,
+                       use_earlystopping: bool = False,
+                       es_patience: int = 5,
+                       verbose: int = 1) -> Dict[str, Any]:
+    callbacks = []
+    if use_earlystopping:
+        callbacks.append(keras.callbacks.EarlyStopping(monitor="val_loss",
+                                                       patience=es_patience,
+                                                       restore_best_weights=True,
+                                                       verbose=0))
+
+    t0 = time.time()
+    history = model.fit(X_train, Y_train,
+                        validation_split=validation_split,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        callbacks=callbacks,
+                        verbose=verbose)
+    train_time = time.time() - t0
+    test_loss, test_acc = model.evaluate(X_test, Y_test, verbose=0)
+
+    return {
+        "model": model,
+        "history": history.history,
+        "test_loss": test_loss,
+        "test_acc": test_acc,
+        "train_time": train_time
     }
 
-    for rep in range(repetitions):
-        if verbose:
-            model.summary()
 
-        cb = []
-        if use_earlystopping:
-            cb.append(keras.callbacks.EarlyStopping(monitor='val_loss', patience=patience, restore_best_weights=True, verbose=0))
+def plot_loss_acc(history: Dict[str, List[float]], title: str, filename: str):
+    epochs = range(1, len(history["loss"]) + 1)
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Loss")
+    ax1.plot(epochs, history["loss"], label="train_loss", linestyle="-")
+    if "val_loss" in history:
+        ax1.plot(epochs, history["val_loss"], label="val_loss", linestyle="--")
+    ax1.legend(loc="upper left")
 
-        t0 = time.time()
-        history = model.fit(X_train, Y_train, validation_split=0.1, epochs=epochs,
-                            batch_size=batch_size, callbacks=cb, verbose=verbose)
-        t1 = time.time()
-        elapsed = t1 - t0
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Accuracy")
+    if "accuracy" in history:
+        ax2.plot(epochs, history["accuracy"], label="train_acc", linestyle="-")
+    if "val_accuracy" in history:
+        ax2.plot(epochs, history["val_accuracy"], label="val_acc", linestyle="--")
+    ax2.legend(loc="lower right")
 
-        test_loss, test_acc = model.evaluate(X_test, Y_test, verbose=0)
-
-        results['models'].append(model)
-        results['histories'].append(history.history)
-        results['test_scores'].append((test_loss, test_acc))
-        results['times'].append(elapsed)
-
-    avg_loss = float(np.mean([s[0] for s in results['test_scores']]))
-    avg_acc  = float(np.mean([s[1] for s in results['test_scores']]))
-    avg_time = float(np.mean(results['times']))
-
-    summary = {
-        'models': results['models'],
-        'histories': results['histories'],
-        'avg_test_loss': avg_loss,
-        'avg_test_acc': avg_acc,
-        'avg_time': avg_time,
-        'raw': results
-    }
-    return summary
+    plt.title(title)
+    save_figure(fig, filename)
 
 
-####################################
-# Tareas expuestas en el enunciado #
-####################################
+def plot_bars_results(results: List[Dict[str, Any]], title: str, filename: str):
+    labels = [r["label"] for r in results]
+    times = [r["train_time"] for r in results]
+    accs = [r["test_acc"] for r in results]
+
+    x = np.arange(len(labels))
+    width = 0.6
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7))
+    ax1.bar(x, times, width)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(labels, rotation=45, ha="right")
+    ax1.set_ylabel("Tiempo (s)")
+    ax1.set_title("Tiempos de entrenamiento")
+
+    ax2.bar(x, accs, width)
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(labels, rotation=45, ha="right")
+    ax2.set_ylabel("Test accuracy")
+    ax2.set_title("Accuracies finales (test)")
+
+    plt.suptitle(title)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    save_figure(fig, filename)
+
+
+def plot_confusion_matrix(y_true: np.ndarray, y_pred: np.ndarray, labels: Optional[List[str]], title: str, filename: str):
+    cm = confusion_matrix(y_true, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=labels)
+    fig, ax = plt.subplots(figsize=(8, 8))
+    disp.plot(ax=ax, xticks_rotation="vertical", cmap=plt.cm.Blues)
+    plt.title(title)
+    save_figure(fig, filename)
+
+
 
 def tareaMLP1() -> keras.models.Model:
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
-    model = keras.models.Sequential([
-        layers.InputLayer(shape=(X_train.shape[1],)),
-        layers.Dense(48, activation='sigmoid'),
-        layers.Dense(10, activation='softmax')
-        ])
-
-    model.compile(optimizer=keras.optimizers.Adam(), loss='categorical_crossentropy', metrics=['accuracy'])
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
+    model = build_mlp(input_dim=X_train.shape[1],
+                      hidden_layers=[48],
+                      activation="sigmoid",
+                      kernel_initializer="glorot_uniform",
+                      out_activation="softmax")
     model.summary()
 
-    # 10% validation split to watch loss and accuracy evolution per epoch
-    t = time.time()
-    history = model.fit(X_train, Y_train, validation_split=0.1, batch_size=32, epochs=10).history
-    t = time.time() - t
-    test_loss, test_accuracy = model.evaluate(X_test, Y_test, verbose=0)
+    res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test)
 
-    data = {
-            'time': t,
-            'accuracy': history['accuracy'],
-            'loss': history['loss'],
-            'val_accuracy': history['val_accuracy'],
-            'val_loss': history['val_loss'],
-            'avg_loss': test_loss,
-            'avg_accuracy': test_accuracy
-            }
+    plot_loss_acc(res["history"], title="MLP1 - evolución (48 neurons, sigmoid, 10 epochs)",
+                  filename="MLP_tarea1_evolucion.png")
 
-    epochs = range(1, len(history['loss']) +1)
-    plt.title('Tarea MLP 1: graphically comparing attribtues')
-    fig, ax_acc = plt.subplots()
-
-    fig.text(0.05, 1.0, f"Evaluated accuracy: {data['avg_accuracy'] * 100:.0f}%", ha='left', va='top', fontsize=12, color='green')
-    fig.text(0.05, 0.95, f"Evaluated loss: {data['avg_loss']:.2f}", ha='left', va='top', fontsize=12, color='red')
-
-    ax_acc.set_xlabel('Epoch')
-    ax_acc.set_ylabel('Accuracy')
-    ax_acc.plot(epochs, data['accuracy'], label='Trainig accuracy', color='green')
-    ax_acc.plot(epochs, data['val_accuracy'], label='Validation accuracy', color='green', linestyle='--')
-    ax_acc.legend(loc='lower left')
-
-    ax_loss = ax_acc.twinx()
-    ax_loss.set_ylabel('Loss')
-    ax_loss.plot(epochs, data['loss'], label='Training loss', color='red')
-    ax_loss.plot(epochs, data['val_loss'], label='Validation loss', color='red', linestyle='--')
-    ax_loss.legend(loc='upper left')
-
-    plt.savefig('MLP_tarea1.png', dpi=150, bbox_inches='tight')
-    return model
+    print(f"MLP1 - test_loss: {res['test_loss']:.4f}, test_acc: {res['test_acc']:.4f}, train_time: {res['train_time']:.1f}s")
+    return res["model"]
 
 
-def tareaMLP2():
-    orig_stdout = sys.stdout
-    sys.stdout = open("tareaMLP2.log", "w")
-
-    epochs_list = [5, 7, 10, 15, 20]
-    colors = ['black', 'blue', 'green', 'yellow', 'red']
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
-    plt.title("Tarea MLP 2: comparing different models development with different epochs")
-    fig, ax_accuracy = plt.subplots()
-    ac_accuracy.set_xlabel('Epoch')
-    ac_accuracy.set_ylabel('Accuracy')
-    ax_loss = plt.twinx()
-    ax_loss.set_ylabel('Loss')
-
-    for i, e in enumerate(epochs_list):
-        model = make_mlp([48])
-        t = time.time()
-        history = model.fit(X_train, Y_train, validation_split=0.1, batch_size=32, epochs=e).history
-        t = time.time() - t
-        avg_loss, avg_accuracy = model.evaluate(X_test, Y_test, verbose=0)
-
-        print((
-            f"MLP {i} training info:\n"
-            f"- time: {t / 1000} seconds\n"
-            f"- epochs: {e}\n"
-            f"- average accuracy: {avg_accuracy}\n"
-            f"- averate loss: {avg_loss}\n"))
-
-        gaphics_data = {
-            'training accuracy': history['accuracy'],
-            'training loss': history['loss'],
-            'validation accuracy': history['val_accuracy'],
-            'validation loss': history['val_loss'],
-            }
-
-        ax_accuracy.plot(e, history['accuracy'], label=f"Training accuracy ({e} epochs)", color=colors[i])
-        ax_accuracy.plot(e, history['val_accuracy'], label=f"Validation accuracy ({e} epochs)", color=colors[i], linestyle='--')
-        ax_loss.plot(e, history['loss'], label=f"Validation loss ({e} epochs)") #TODO: draw loss and accuracy in separated subplots but same image
-
-    sys.stdout = orig_stdout
-
-
-def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3):
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
+def tareaMLP2(epochs_list: List[int] = [1, 5, 10, 25, 40, 70], repetitions: int = 5, use_earlystopping: bool = False):
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
-    for b in batch_sizes:
-        print(f"\nRight now batch_size = {b}")
-        res = try_mlp(X_train, Y_train, X_test, Y_test,
-                         hidden_layers=[48],
-                         activation='sigmoid',
-                         batch_size=b,
-                         epochs=20,
-                         use_earlystopping=True,
-                         patience=5,
-                         repetitions=repetitions,
-                         verbose=0)
-        results.append({'label': f"bs_{b}", 'time': res['avg_time'], 'test_acc': res['avg_test_acc']})
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste batch_size", filename='MLP_tarea3_ajuste_batch_size.png')
+
+    for e in epochs_list:
+        label = f"epochs_{e}"
+        accs = []
+        times = []
+        histories = []
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=42 + rep)
+            model = build_mlp(input_dim=X_train.shape[1], hidden_layers=[48], activation="sigmoid")
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test, epochs=e,
+                                     use_earlystopping=use_earlystopping, es_patience=5, verbose=0)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+            histories.append(res["history"])
+
+        results.append({
+            "label": label,
+            "test_acc": float(np.mean(accs)),
+            "test_acc_std": float(np.std(accs)),
+            "train_time": float(np.mean(times)),
+            "histories": histories
+        })
+        print(f"{label}: mean_acc={np.mean(accs):.4f} (std={np.std(accs):.4f}), mean_time={np.mean(times):.1f}s")
+
+    plot_bars_results(results, title="MLP2 - Comparativa epochs", filename="MLP_tarea2_epochs_comparativa.png")
+    for r in results:
+        hist0 = r["histories"][0]
+        plot_loss_acc(hist0, title=f"MLP epochs {r['label']}", filename=f"MLP_tarea2_{r['label']}_evol.png")
+
     return results
 
 
-def tareaMLP4(activations_and_inits: Optional[List[Dict[str, str]]] = None, repetitions: int = 3):
+def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3, use_earlystopping: bool = False):
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
+    results = []
+    for b in batch_sizes:
+        label = f"bs_{b}"
+        accs = []
+        times = []
+        histories = []
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=123 + rep)
+            model = build_mlp(input_dim=X_train.shape[1], hidden_layers=[48], activation="relu", kernel_initializer="he_normal")
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                                     epochs=20, batch_size=b, validation_split=0.1,
+                                     use_earlystopping=use_earlystopping, es_patience=5, verbose=0)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+            histories.append(res["history"])
+        results.append({"label": label, "test_acc": float(np.mean(accs)), "train_time": float(np.mean(times)), "histories": histories})
+        print(f"{label}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
+
+    plot_bars_results(results, title="MLP3 - Comparativa batch_size", filename="MLP_tarea3_batchsize.png")
+    return results
+
+
+def tareaMLP4(activations_and_inits: Optional[List[Dict[str, str]]] = None,
+              repetitions: int = 3,
+              use_earlystopping: bool = False):
     if activations_and_inits is None:
         activations_and_inits = [
             {'activation': 'sigmoid', 'initializer': 'glorot_uniform'},
@@ -334,67 +257,79 @@ def tareaMLP4(activations_and_inits: Optional[List[Dict[str, str]]] = None, repe
             {'activation': 'relu',    'initializer': 'he_normal'},
             {'activation': 'elu',     'initializer': 'he_normal'},
         ]
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for cfg in activations_and_inits:
         label = f"{cfg['activation']}_{cfg['initializer']}"
-        print(f"\nNow trying {label}")
-        res = try_mlp(X_train, Y_train, X_test, Y_test,
-                         hidden_layers=[48],
-                         activation=cfg['activation'],
-                         kernel_initializer=cfg['initializer'],
-                         epochs=20,
-                         use_earlystopping=True,
-                         patience=5,
-                         repetitions=repetitions,
-                         verbose=0)
-        results.append({'label': label, 'time': res['avg_time'], 'test_acc': res['avg_test_acc'], 'histories': res['histories']})
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - activacion / inicializador", filename='MLP_tarea4_activacion_inicializador.png')
+        accs = []
+        times = []
+        histories = []
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=7 + rep)
+            model = build_mlp(input_dim=X_train.shape[1],
+                              hidden_layers=[48],
+                              activation=cfg['activation'],
+                              kernel_initializer=cfg['initializer'])
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                                     epochs=20, batch_size=32, validation_split=0.1,
+                                     use_earlystopping=use_earlystopping, es_patience=5, verbose=0)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+            histories.append(res["history"])
+        results.append({"label": label, "test_acc": float(np.mean(accs)), "train_time": float(np.mean(times)), "histories": histories})
+        print(f"{label}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
+
+    plot_bars_results(results, title="MLP4 - activaciones / inicializadores", filename="MLP_tarea4_activ_init.png")
     return results
 
 
-def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96], repetitions: int = 3):
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
+def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96], repetitions: int = 3, use_earlystopping: bool = False):
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for n in neuron_counts:
-        print(f"\nTrying {n} neurons")
-        res = try_mlp(X_train, Y_train, X_test, Y_test,
-                         hidden_layers=[n],
-                         activation='relu',
-                         kernel_initializer='he_normal',
-                         epochs=20,
-                         use_earlystopping=True,
-                         patience=5,
-                         repetitions=repetitions,
-                         verbose=0)
-        results.append({'label': f"{n}n", 'time': res['avg_time'], 'test_acc': res['avg_test_acc']})
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - ajuste nº neuronas", filename='MLP_tarea5_ajuste_de_neuronas.png')
+        label = f"{n}n"
+        accs = []
+        times = []
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=50 + rep)
+            model = build_mlp(input_dim=X_train.shape[1], hidden_layers=[n], activation="relu", kernel_initializer="he_normal")
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                                     epochs=20, batch_size=32, validation_split=0.1,
+                                     use_earlystopping=use_earlystopping, es_patience=5, verbose=0)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+        results.append({"label": label, "test_acc": float(np.mean(accs)), "train_time": float(np.mean(times))})
+        print(f"{label}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
+
+    plot_bars_results(results, title="MLP5 - ajuste nº neuronas", filename="MLP_tarea5_neuronas.png")
     return results
 
 
-def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3):
+def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3, use_earlystopping: bool = False):
     if configs is None:
-        configs = [[96], [48,48], [32,64], [64,32], [32,32,32], [16,32,48]]
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
+        configs = [[96], [48, 48], [32, 64], [64, 32], [32, 32, 32], [16, 32, 48]]
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for cfg in configs:
         label = "+".join(map(str, cfg))
-        print(f"\nProbando capas {label}")
-        res = try_mlp(X_train, Y_train, X_test, Y_test,
-                         hidden_layers=cfg,
-                         activation='relu',
-                         kernel_initializer='he_normal',
-                         epochs=30,
-                         use_earlystopping=True,
-                         patience=6,
-                         repetitions=repetitions,
-                         verbose=0)
-        results.append({'label': label, 'time': res['avg_time'], 'test_acc': res['avg_test_acc']})
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP - capas y distribución neuronas", filename='MLP_tarea6_capas_y_neuronas.png')
+        accs = []
+        times = []
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=200 + rep)
+            model = build_mlp(input_dim=X_train.shape[1], hidden_layers=cfg, activation="relu", kernel_initializer="he_normal")
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                                     epochs=30, batch_size=32, validation_split=0.1,
+                                     use_earlystopping=use_earlystopping, es_patience=6, verbose=0)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+        results.append({"label": label, "test_acc": float(np.mean(accs)), "train_time": float(np.mean(times))})
+        print(f"{label}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
+    plot_bars_results(results, title="MLP6 - capas y distribución de neuronas", filename="MLP_tarea6_capas_neuronas.png")
     return results
 
 
-def tareaMLP7(repetitions: int = 3):
+#TODO: investigate and make handmade
+def tareaMLP7(repetitions: int = 3, use_earlystopping: bool = True):
     candidates = [
         {'hidden': [128, 64], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.3, 'l2': 1e-4, 'batchnorm': True},
         {'hidden': [256, 128], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
@@ -402,70 +337,88 @@ def tareaMLP7(repetitions: int = 3):
         {'hidden': [512], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.5, 'l2': 1e-3, 'batchnorm': False},
         {'hidden': [384, 256], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
     ]
-    # Ensure less than 1000 neurons
     candidates = [c for c in candidates if sum(c['hidden']) <= 1000 and len(c['hidden']) <= 6]
 
-    X_train, Y_train, X_test, Y_test = preprocess_cifar10_mlp()
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for c in candidates:
-        label = f"{'+'.join(map(str,c['hidden']))}_act-{c['activation']}_do-{c['dropout']}_l2-{c['l2']}"
-        print(f"\nProbando candidate: {label}")
-        res = try_mlp(X_train, Y_train, X_test, Y_test,
-                         hidden_layers=c['hidden'],
-                         activation=c['activation'],
-                         kernel_initializer=c['init'],
-                         batch_size=64,
-                         epochs=50,
-                         use_earlystopping=True,
-                         patience=6,
-                         l2_reg=c['l2'],
-                         dropout=c['dropout'],
-                         use_batchnorm=c['batchnorm'],
-                         repetitions=repetitions,
-                         verbose=0)
-        results.append({'label': label, 'time': res['avg_time'], 'test_acc': res['avg_test_acc'], 'raw': res})
+        label = f"{'+'.join(map(str, c['hidden']))}_act-{c['activation']}_do-{c['dropout']}_l2-{c['l2']}"
+        print(f"Probando candidate: {label}")
+        accs = []
+        times = []
+        raws = []
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=999 + rep)
+            model = build_mlp(input_dim=X_train.shape[1],
+                              hidden_layers=c['hidden'],
+                              activation=c['activation'],
+                              kernel_initializer=c['init'],
+                              l2_reg=c['l2'],
+                              dropout=c['dropout'],
+                              use_batchnorm=c['batchnorm'])
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                                     epochs=50, batch_size=64, validation_split=0.1,
+                                     use_earlystopping=use_earlystopping, es_patience=6, verbose=0)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+            raws.append(res)
+        results.append({"label": label, "test_acc": float(np.mean(accs)), "train_time": float(np.mean(times)), "raws": raws})
+        print(f"{label}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
 
-    results = sorted(results, key=lambda r: r['test_acc'], reverse=True)
-    gfx_bars_training_time_and_final_success_rate(results, title="MLP7 - Optimización final", filename='MLP_tarea7_optimizacion_final.png')
+    results_sorted = sorted(results, key=lambda r: r["test_acc"], reverse=True)
+    plot_bars_results(results_sorted, title="MLP7 - optimización final", filename="MLP_tarea7_optim_final.png")
 
-    best = results[0]
-    best_model = best['raw']['models'][0]
+    best = results_sorted[0]
+    best_raw = best["raws"][0]
+    best_model = best_raw["model"]
 
-    _, _, X_test_raw, Y_test_raw = None, None, None, None
-    X_train_p, Y_train_p, X_test_p, Y_test_p = preprocess_cifar10_mlp()
+    X_train_p, Y_train_p, X_test_p, Y_test_p = load_preprocess_mlp()
     y_true = np.argmax(Y_test_p, axis=1)
     y_pred = np.argmax(best_model.predict(X_test_p), axis=1)
-    matriz_de_confusion(y_true, y_pred, labels=[str(i) for i in range(10)], title=f"Matriz confusión - {best['label']}")
-    print("Top candidates (label, acc, time):")
-    for r in results[:5]:
-        print(r['label'], r['test_acc'], f"{r['time']:.2f}s")
-    return results
+    labels = [str(i) for i in range(10)]
+    plot_confusion_matrix(y_true, y_pred, labels=labels, title=f"Matriz confusión - {best['label']}", filename="MLP_tarea7_confmat_best.png")
+
+    # imprimir top 5
+    print("\nTop candidates (label, acc, time):")
+    for r in results_sorted[:5]:
+        print(r["label"], f"{r['test_acc']:.4f}", f"{r['train_time']:.1f}s")
+    return results_sorted
 
 
+# ---------------------------
+# Plantillas CNN (por completar)
+# ---------------------------
+def build_cnn_template(input_shape=(32, 32, 3), num_classes=10):
+    """
+    Plantilla CNN sencilla (para implementar CNN1, CNN2, CNN3).
+    Se deja como plantilla para que completes en la segunda parte.
+    """
+    model = keras.models.Sequential([
+        layers.InputLayer(input_shape=input_shape),
+        layers.Conv2D(16, (3, 3), activation="relu", padding="same", kernel_initializer="he_normal"),
+        layers.MaxPooling2D((2, 2)),
+        layers.Conv2D(32, (3, 3), activation="relu", padding="same", kernel_initializer="he_normal"),
+        layers.MaxPooling2D((2, 2)),
+        layers.Flatten(),
+        layers.Dense(100, activation="relu"),
+        layers.Dense(num_classes, activation="softmax")
+    ])
+    model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
+    return model
+
+
+# ---------------------------
+# Main: ejecuta la tarea deseada (descomenta la que quieras correr)
+# ---------------------------
 if __name__ == "__main__":
-    # Helper functions attribute names
-    make_mlp.input_dim = 32 * 32 * 3
-    make_mlp.output_units = 10                  # Equivalent to the number of classes
-    make_mlp.out_activation_func = 'softmax'
+    # WARNING: dejar comentadas las tareas que no se usan
 
-    # Tool testing (uncomment to use)
-    ############################################################
-    #(X_train, Y_train), (X_test, Y_test) = loadprint_cifar10()
-    #draw_random_image(X_train, Y_train)
-    #plot_sample_types(Y_test[:20])
-    ############################################################
+    # mlp1 = tareaMLP1()
+    res2 = tareaMLP2()
+    # res3 = tareaMLP3()
+    # res4 = tareaMLP4()
+    # res5 = tareaMLP5()
+    # res6 = tareaMLP6()
+    # res7 = tareaMLP7()
 
-    # Primera parte, tareas con MLP
-    #MLP = tareaMLP1()
-    MLP = tareaMLP2()
-    #MLP = tareaMLP3()
-    #MLP = tareaMLP4()
-    #MLP = tareaMLP5()
-    #MLP = tareaMLP6()
-    #MLP = tareaMLP7()
-
-    # Segunda parte, tareas CNN
-    #CNN = funcionCNN1(...)
-    #CNN = funcionCNN29(...)
-
-    # NOTA: dejar todo comentado menos la ultima tarea
+    #TODO: Aquí actividades de CNN
