@@ -223,7 +223,7 @@ def tareaMLP2(epochs_list: List[int] = [1, 5, 10, 25, 40, 70], repetitions: int 
     return results
 
 
-def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3, use_earlystopping: bool = False):
+def tareaMLP3(batch_sizes: List[int] = [8, 16, 32, 64, 128, 256], repetitions: int = 3, activation = "sigmoid"):
     X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for b in batch_sizes:
@@ -233,10 +233,9 @@ def tareaMLP3(batch_sizes: List[int] = [16, 32, 64], repetitions: int = 3, use_e
         histories = []
         for rep in range(repetitions):
             ensure_reproducibility(seed=123 + rep)
-            model = build_mlp(input_dim=X_train.shape[1], hidden_layers=[48], activation="relu", kernel_initializer="he_normal")
+            model = build_mlp(input_dim=X_train.shape[1], hidden_layers=[48], activation=activation, kernel_initializer="he_normal")
             res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
-                                     epochs=20, batch_size=b, validation_split=0.1,
-                                     use_earlystopping=use_earlystopping, es_patience=5, verbose=0)
+                                     epochs=20, batch_size=b, validation_split=0.1, es_patience=5, verbose=0)
             accs.append(res["test_acc"])
             times.append(res["train_time"])
             histories.append(res["history"])
@@ -414,11 +413,11 @@ if __name__ == "__main__":
     # WARNING: dejar comentadas las tareas que no se usan
 
     # mlp1 = tareaMLP1()
-    res2 = tareaMLP2()
-    # res3 = tareaMLP3()
-    # res4 = tareaMLP4()
-    # res5 = tareaMLP5()
-    # res6 = tareaMLP6()
-    # res7 = tareaMLP7()
+    #res2 = tareaMLP2()
+    #res3 = tareaMLP3()
+    res4 = tareaMLP4()
+    res5 = tareaMLP5()
+    res6 = tareaMLP6()
+    #res7 = tareaMLP7()
 
     #TODO: Aquí actividades de CNN
