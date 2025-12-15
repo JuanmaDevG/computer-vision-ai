@@ -282,7 +282,7 @@ def tareaMLP4(activations_and_inits: Optional[List[Dict[str, str]]] = None,
     return results
 
 
-def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96], repetitions: int = 3, use_earlystopping: bool = False):
+def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96, 128, 256, 512, 1024], repetitions: int = 3, use_earlystopping: bool = False):
     X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for n in neuron_counts:
@@ -306,7 +306,7 @@ def tareaMLP5(neuron_counts: List[int] = [16, 32, 48, 64, 96], repetitions: int 
 
 def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3, use_earlystopping: bool = False):
     if configs is None:
-        configs = [[96], [48, 48], [32, 64], [64, 32], [32, 32, 32], [16, 32, 48]]
+        configs = [[96], [48, 48], [32, 64], [64, 32], [32, 32, 32], [16, 32, 48], [96, 64, 48, 32, 16]]
     X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for cfg in configs:
@@ -328,7 +328,11 @@ def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3, u
 
 
 #TODO: investigate and make handmade
-def tareaMLP7(repetitions: int = 3, use_earlystopping: bool = True):
+#TODO: use a namedtuple to define the models to train and try
+#TODO: correctly configure early stopping
+def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
+    from collections import namedtuple
+    ModelTemplate = namedtuple('ModelTemplate', []) #TODO: put and organize parameters
     candidates = [
         {'hidden': [128, 64], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.3, 'l2': 1e-4, 'batchnorm': True},
         {'hidden': [256, 128], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
