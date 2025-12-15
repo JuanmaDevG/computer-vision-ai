@@ -327,12 +327,43 @@ def tareaMLP6(configs: Optional[List[List[int]]] = None, repetitions: int = 3, u
     return results
 
 
-#TODO: investigate and make handmade
-#TODO: use a namedtuple to define the models to train and try
-#TODO: correctly configure early stopping
 def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
-    from collections import namedtuple
-    ModelTemplate = namedtuple('ModelTemplate', []) #TODO: put and organize parameters
+    #RECUERDA: menos de 1000 neuronas y maximo de 6 capas
+    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
+    INPUT_DIM = X_train.shape[1]
+    OUTPUT_UNITS = 10
+
+    from typing import NamedTuple
+    class BuildParams(NamedTuple):
+        hidden_layers: List[int]
+        activation: str = 'sigmoid'
+        kernel_initializer: str = 'glorot_uniform'
+        l2_reg: float = 0.0
+        dropout: float = 0.0
+        batchnorm: bool = False
+        out_activation: str = 'softmax'
+
+    class TrainParams(NamedTuple):
+        epochs: int
+        batch_size: int
+        validation_split: float = 0.1
+        earlystopping: bool = False
+        es_patience: int = 5
+        verbose: int = 0
+
+    class ModelTemplate(NamedTuple):
+        buildparams: BuildParams
+        trainparams: TrainParams
+        const_buildparams: Tuple = (INPUT_DIM, OUTPUT_UNITS)
+
+
+    candidates = [
+            ModelTemplate(
+                buildparams = BuildParams([512, 256, 64, 32, 16], 'sigmoid'), #TODO: learn about l2 regularizer, dropout and batch_normalization
+                trainparams = TrainParams(25, 256, earlystopping = True))
+            ]
+
+    #TODO: don't delete this, use now as template for new models
     candidates = [
         {'hidden': [128, 64], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.3, 'l2': 1e-4, 'batchnorm': True},
         {'hidden': [256, 128], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
@@ -340,28 +371,22 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
         {'hidden': [512], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.5, 'l2': 1e-3, 'batchnorm': False},
         {'hidden': [384, 256], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
     ]
-    candidates = [c for c in candidates if sum(c['hidden']) <= 1000 and len(c['hidden']) <= 6]
 
-    X_train, Y_train, X_test, Y_test = load_preprocess_mlp()
     results = []
     for c in candidates:
-        label = f"{'+'.join(map(str, c['hidden']))}_act-{c['activation']}_do-{c['dropout']}_l2-{c['l2']}"
+        label = f"{'+'.join(map(str, c.buildparams.hiddenlayers))}_act-{c.buildparams.activation}" \
+                f"_do-{c.buildparams.dropout}_batchnorm-{c.buildparams.batchnorm}_l2-{c.buildparams.l2_reg}" \
+                f"_epochs-{c.trainparams.epochs}_batchsize-{c.trainparams.batch_size}" \
+                (f"_es-patience-{c.trainparams.es_patience}" if c.trainparams.earlystopping else "")
         print(f"Probando candidate: {label}")
         accs = []
         times = []
         raws = []
         for rep in range(repetitions):
             ensure_reproducibility(seed=999 + rep)
-            model = build_mlp(input_dim=X_train.shape[1],
-                              hidden_layers=c['hidden'],
-                              activation=c['activation'],
-                              kernel_initializer=c['init'],
-                              l2_reg=c['l2'],
-                              dropout=c['dropout'],
-                              use_batchnorm=c['batchnorm'])
-            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
-                                     epochs=50, batch_size=64, validation_split=0.1,
-                                     use_earlystopping=use_earlystopping, es_patience=6, verbose=0)
+            model = build_model(*c.const_buildparams, *c.buildparams)
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test, *c.trainparams)
+            #TODO: creo que por aquí el código no está del todo adaptado
             accs.append(res["test_acc"])
             times.append(res["train_time"])
             raws.append(res)
