@@ -356,10 +356,10 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
         trainparams: TrainParams
         const_buildparams: Tuple = (INPUT_DIM, OUTPUT_UNITS)
 
-
+    #TODO: learn more activation functions
     candidates = [
             ModelTemplate(
-                buildparams = BuildParams([512, 256, 64, 32, 16], 'sigmoid'), #TODO: learn about l2 regularizer, dropout and batch_normalization
+                buildparams = BuildParams([512, 256, 64, 32, 16], 'sigmoid', l2_reg=1e-4, dropout=0.25),
                 trainparams = TrainParams(25, 256, earlystopping = True))
             ]
 
@@ -386,7 +386,7 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
             ensure_reproducibility(seed=999 + rep)
             model = build_model(*c.const_buildparams, *c.buildparams)
             res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test, *c.trainparams)
-            #TODO: creo que por aquí el código no está del todo adaptado
+            #TODO: remake the code that stores data
             accs.append(res["test_acc"])
             times.append(res["train_time"])
             raws.append(res)
