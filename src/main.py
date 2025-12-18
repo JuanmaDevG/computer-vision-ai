@@ -475,7 +475,7 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
                     activation = 'relu', 
                     kernel_initializer = 'he_normal',
                     l2_reg=1e-4,
-                    dropout=0.25
+                    dropout=0.25,
                     batchnorm = False
                 ),
                 trainparams = TrainParams(
@@ -498,7 +498,7 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
         raws = []
         for rep in range(repetitions):
             ensure_reproducibility(seed=999 + rep)
-            model = build_model(*c.const_buildparams, *c.buildparams)
+            model = build_mlp(*c.const_buildparams, *c.buildparams)
             res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test, *c.trainparams)
             accs.append(res["test_acc"])
             times.append(res["train_time"])
@@ -557,9 +557,9 @@ if __name__ == "__main__":
     # mlp1 = tareaMLP1()
     #res2 = tareaMLP2()
     #res3 = tareaMLP3()
-    res4 = tareaMLP4()
-    res5 = tareaMLP5()
-    res6 = tareaMLP6()
-    #res7 = tareaMLP7()
+    #res4 = tareaMLP4()
+    #res5 = tareaMLP5()
+    #res6 = tareaMLP6()
+    res7 = tareaMLP7()
 
     #TODO: Aquí actividades de CNN

@@ -1,9 +1,0 @@
-- [x] How optimizers work exactly
-- [x] What is exactly categorical_crossentropy
-- model.fit
-  - [x] validation_split
-  - [x] batch_size
-  - [x] epochs
-
-- [x] accuracy
-- [x] loss (is literally the error function)
