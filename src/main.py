@@ -356,28 +356,142 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
         trainparams: TrainParams
         const_buildparams: Tuple = (INPUT_DIM, OUTPUT_UNITS)
 
-    #TODO: learn more activation functions
     candidates = [
             ModelTemplate(
-                buildparams = BuildParams([512, 256, 64, 32, 16], 'sigmoid', l2_reg=1e-4, dropout=0.25),
-                trainparams = TrainParams(25, 256, earlystopping = True))
-            ]
-
-    #TODO: don't delete this, use now as template for new models
-    candidates = [
-        {'hidden': [128, 64], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.3, 'l2': 1e-4, 'batchnorm': True},
-        {'hidden': [256, 128], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
-        {'hidden': [96, 48, 32], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.2, 'l2': 1e-4, 'batchnorm': True},
-        {'hidden': [512], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.5, 'l2': 1e-3, 'batchnorm': False},
-        {'hidden': [384, 256], 'activation': 'relu', 'init': 'he_normal', 'dropout': 0.4, 'l2': 1e-4, 'batchnorm': True},
-    ]
+                buildparams = BuildParams(
+                    hidden_layers=[128, 64],
+                    activation='relu',
+                    kernel_initializer='he_normal',
+                    l2_reg=1e-3,
+                    dropout=0.3,
+                    batchnorm=True
+                ),
+                trainparams = TrainParams(
+                    epochs=50,
+                    batch_size=16,
+                    earlystopping=True,
+                    es_patience=6
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers=[128, 64],
+                    activation='sigmoid',
+                    kernel_initializer='glorot_uniform',
+                    l2_reg=1e-4,
+                    dropout=0.15,
+                    batchnorm=True
+                ),
+                trainparams = TrainParams(
+                    epochs=60,
+                    batch_size=64,
+                    earlystopping=True,
+                    es_patience=8
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers=[256, 128],
+                    activation='relu',
+                    kernel_initializer='he_normal',
+                    l2_reg=1e-4,
+                    dropout=0.4,
+                    batchnorm=True
+                ),
+                trainparams = TrainParams(
+                    epochs=50,
+                    batch_size=64,
+                    earlystopping=True,
+                    es_patience=6
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers=[96, 64, 32],
+                    activation='relu',
+                    kernel_initializer='he_normal',
+                    l2_reg=1e-4,
+                    dropout=0.25,
+                    batchnorm=True
+                ),
+                trainparams = TrainParams(
+                    epochs=50,
+                    batch_size=64,
+                    earlystopping=True,
+                    es_patience=6
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers=[512],
+                    activation='relu',
+                    kernel_initializer='he_normal',
+                    l2_reg=1e-3,
+                    dropout=0.5,
+                    batchnorm=False
+                ),
+                trainparams = TrainParams(
+                    epochs=50,
+                    batch_size=64,
+                    earlystopping=True,
+                    es_patience=6
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers=[64, 64],
+                    activation='relu',
+                    kernel_initializer='he_normal',
+                    l2_reg=1e-4,
+                    dropout=0.2,
+                    batchnorm=True
+                ),
+                trainparams = TrainParams(
+                    epochs=50,
+                    batch_size=64,
+                    earlystopping=True,
+                    es_patience=6
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers=[64, 48, 32, 16],
+                    activation='relu',
+                    kernel_initializer='he_normal',
+                    l2_reg=1e-4,
+                    dropout=0.25,
+                    batchnorm=True
+                ),
+                trainparams = TrainParams(
+                    epochs=50,
+                    batch_size=64,
+                    earlystopping=True,
+                    es_patience=6
+                )
+            ),
+            ModelTemplate(
+                buildparams = BuildParams(
+                    hidden_layers = [512, 256, 64, 32, 16],
+                    activation = 'relu', 
+                    kernel_initializer = 'he_normal',
+                    l2_reg=1e-4,
+                    dropout=0.25
+                    batchnorm = False
+                ),
+                trainparams = TrainParams(
+                    epochs = 30,
+                    batch_size = 256,
+                    earlystopping = True
+                )
+            )
+        ]
 
     results = []
     for c in candidates:
-        label = f"{'+'.join(map(str, c.buildparams.hiddenlayers))}_act-{c.buildparams.activation}" \
+        label = f"{'+'.join(map(str, c.buildparams.hidden_layers))}_act-{c.buildparams.activation}" \
                 f"_do-{c.buildparams.dropout}_batchnorm-{c.buildparams.batchnorm}_l2-{c.buildparams.l2_reg}" \
                 f"_epochs-{c.trainparams.epochs}_batchsize-{c.trainparams.batch_size}" \
-                (f"_es-patience-{c.trainparams.es_patience}" if c.trainparams.earlystopping else "")
+                + (f"_es-patience-{c.trainparams.es_patience}" if c.trainparams.earlystopping else "")
         print(f"Probando candidate: {label}")
         accs = []
         times = []
@@ -386,7 +500,6 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
             ensure_reproducibility(seed=999 + rep)
             model = build_model(*c.const_buildparams, *c.buildparams)
             res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test, *c.trainparams)
-            #TODO: remake the code that stores data
             accs.append(res["test_acc"])
             times.append(res["train_time"])
             raws.append(res)
