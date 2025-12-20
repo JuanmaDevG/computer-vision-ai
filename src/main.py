@@ -1,7 +1,7 @@
 import os
 import time
 from pathlib import Path
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any, Optional, NamedTuple
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -333,7 +333,6 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
     INPUT_DIM = X_train.shape[1]
     OUTPUT_UNITS = 10
 
-    from typing import NamedTuple
     class BuildParams(NamedTuple):
         hidden_layers: List[int]
         activation: str = 'sigmoid'
@@ -487,12 +486,13 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
         ]
 
     results = []
-    for c in candidates:
-        label = f"{'+'.join(map(str, c.buildparams.hidden_layers))}_act-{c.buildparams.activation}" \
+    for idx, c in enumerate(candidates):
+        label = f"ModelTemplate_{idx}"
+        info_tag = f"{'+'.join(map(str, c.buildparams.hidden_layers))}_act-{c.buildparams.activation}" \
                 f"_do-{c.buildparams.dropout}_batchnorm-{c.buildparams.batchnorm}_l2-{c.buildparams.l2_reg}" \
                 f"_epochs-{c.trainparams.epochs}_batchsize-{c.trainparams.batch_size}" \
                 + (f"_es-patience-{c.trainparams.es_patience}" if c.trainparams.earlystopping else "")
-        print(f"Probando candidate: {label}")
+        print(f"Probando candidate: {info_tag}")
         accs = []
         times = []
         raws = []
@@ -504,7 +504,7 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
             times.append(res["train_time"])
             raws.append(res)
         results.append({"label": label, "test_acc": float(np.mean(accs)), "train_time": float(np.mean(times)), "raws": raws})
-        print(f"{label}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
+        print(f"{info_tag}: mean_acc={np.mean(accs):.4f}, mean_time={np.mean(times):.1f}s")
 
     results_sorted = sorted(results, key=lambda r: r["test_acc"], reverse=True)
     plot_bars_results(results_sorted, title="MLP7 - optimización final", filename="MLP_tarea7_optim_final.png")
@@ -520,46 +520,461 @@ def tareaMLP7(repetitions: int = 10, use_earlystopping: bool = True):
     plot_confusion_matrix(y_true, y_pred, labels=labels, title=f"Matriz confusión - {best['label']}", filename="MLP_tarea7_confmat_best.png")
 
     # imprimir top 5
-    print("\nTop candidates (label, acc, time):")
+    print("\nTop candidates (info_tag, acc, time):")
     for r in results_sorted[:5]:
         print(r["label"], f"{r['test_acc']:.4f}", f"{r['train_time']:.1f}s")
     return results_sorted
 
 
-# ---------------------------
-# Plantillas CNN (por completar)
-# ---------------------------
-def build_cnn_template(input_shape=(32, 32, 3), num_classes=10):
-    """
-    Plantilla CNN sencilla (para implementar CNN1, CNN2, CNN3).
-    Se deja como plantilla para que completes en la segunda parte.
-    """
-    model = keras.models.Sequential([
-        layers.InputLayer(input_shape=input_shape),
-        layers.Conv2D(16, (3, 3), activation="relu", padding="same", kernel_initializer="he_normal"),
-        layers.MaxPooling2D((2, 2)),
-        layers.Conv2D(32, (3, 3), activation="relu", padding="same", kernel_initializer="he_normal"),
-        layers.MaxPooling2D((2, 2)),
-        layers.Flatten(),
-        layers.Dense(100, activation="relu"),
-        layers.Dense(num_classes, activation="softmax")
-    ])
-    model.compile(optimizer="adam", loss="categorical_crossentropy", metrics=["accuracy"])
+def load_preprocess_cnn() -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    (X_train, Y_train), (X_test, Y_test) = cifar10.load_data()
+    X_train = X_train.astype("float32") / 255.0
+    X_test  = X_test.astype("float32") / 255.0
+
+    Y_train = to_categorical(Y_train, num_classes=10)
+    Y_test  = to_categorical(Y_test, num_classes=10)
+    return X_train, Y_train, X_test, Y_test
+
+
+def build_cnn(input_shape: Tuple[int, int, int] = (32, 32, 3),
+              num_classes: int = 10,
+              filters_block1: int = 16,
+              filters_block2: int = 32,
+              kernel_size: Tuple[int, int] = (3, 3),
+              activation: str = "relu",
+              kernel_initializer: str = "he_normal",
+              dense_units: int = 100,
+              use_batchnorm: bool = False,
+              dropout: float = 0.0) -> keras.models.Model:
+    model = keras.models.Sequential()
+    model.add(layers.InputLayer(shape=input_shape))
+
+    model.add(layers.Conv2D(filters_block1, kernel_size, padding="same",
+                            kernel_initializer=kernel_initializer))
+    if use_batchnorm:
+        model.add(layers.BatchNormalization())
+    model.add(layers.Activation(activation))
+    model.add(layers.MaxPooling2D((2, 2)))
+
+    model.add(layers.Conv2D(filters_block2, kernel_size, padding="same",
+                            kernel_initializer=kernel_initializer))
+    if use_batchnorm:
+        model.add(layers.BatchNormalization())
+    model.add(layers.Activation(activation))
+    model.add(layers.MaxPooling2D((2, 2)))
+
+    model.add(layers.Flatten())
+    if dropout and dropout > 0.0:
+        model.add(layers.Dropout(dropout))
+    model.add(layers.Dense(dense_units, activation="relu", kernel_initializer="he_normal"))
+    model.add(layers.Dense(num_classes, activation="softmax"))
+
+    model.compile(optimizer=keras.optimizers.Adam(),
+                  loss="categorical_crossentropy",
+                  metrics=["accuracy"])
     return model
 
 
-# ---------------------------
-# Main: ejecuta la tarea deseada (descomenta la que quieras correr)
-# ---------------------------
+def tareaCNN1(epochs: int = 30,
+              batch_size: int = 64,
+              validation_split: float = 0.1,
+              use_earlystopping: bool = True,
+              es_patience: int = 6,
+              verbose: int = 0) -> keras.models.Model:
+    X_train, Y_train, X_test, Y_test = load_preprocess_cnn()
+    model = build_cnn(input_shape=X_train.shape[1:], num_classes=Y_train.shape[1],
+                      filters_block1=16, filters_block2=32, kernel_size=(3, 3),
+                      activation="relu", kernel_initializer="he_normal",
+                      dense_units=100, use_batchnorm=False, dropout=0.0)
+    model.summary()
+
+    res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                             epochs=epochs, batch_size=batch_size,
+                             validation_split=validation_split,
+                             use_earlystopping=use_earlystopping,
+                             es_patience=es_patience, verbose=verbose)
+
+    plot_loss_acc(res["history"], title=f"CNN1 - evolución (16/32 filters, kernel 3x3)",
+                  filename="CNN_tarea1_evolucion.png")
+    print(f"CNN1 - test_loss: {res['test_loss']:.4f}, test_acc: {res['test_acc']:.4f}, train_time: {res['train_time']:.1f}s")
+    y_true = np.argmax(Y_test, axis=1)
+    y_pred = np.argmax(res["model"].predict(X_test), axis=1)
+    labels = [str(i) for i in range(Y_test.shape[1])]
+    plot_confusion_matrix(y_true, y_pred, labels=labels, title="CNN1 - Matriz de confusión",
+                          filename="CNN_tarea1_confmat.png")
+
+    return res["model"]
+
+
+def tareaCNN2(kernel_sizes: Optional[List[Tuple[int, int]]] = None,
+              repetitions: int = 3,
+              epochs: int = 40,
+              batch_size: int = 64,
+              validation_split: float = 0.1,
+              use_earlystopping: bool = True,
+              es_patience: int = 6,
+              verbose: int = 0):
+    if kernel_sizes is None:
+        kernel_sizes = [(3, 3), (5, 5), (7, 7)]
+
+    X_train, Y_train, X_test, Y_test = load_preprocess_cnn()
+    results = []
+
+    for k in kernel_sizes:
+        label = f"kernel_{k[0]}x{k[1]}"
+        accs = []
+        times = []
+        histories = []
+        print(f"\nProbando kernel size: {k}")
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=100 + rep)
+            model = build_cnn(input_shape=X_train.shape[1:], num_classes=Y_train.shape[1],
+                              filters_block1=16, filters_block2=32, kernel_size=k,
+                              activation="relu", kernel_initializer="he_normal",
+                              dense_units=100, use_batchnorm=False, dropout=0.0)
+
+            res = train_and_evaluate(model, X_train, Y_train, X_test, Y_test,
+                                     epochs=epochs, batch_size=batch_size,
+                                     validation_split=validation_split,
+                                     use_earlystopping=use_earlystopping,
+                                     es_patience=es_patience,
+                                     verbose=verbose)
+            accs.append(res["test_acc"])
+            times.append(res["train_time"])
+            histories.append(res["history"])
+
+            if rep == 0:
+                plot_loss_acc(res["history"], title=f"CNN - kernel {k[0]}x{k[1]} - evolución",
+                              filename=f"CNN_tarea2_kernel_{k[0]}x{k[1]}_evol.png")
+
+        results.append({
+            "label": label,
+            "test_acc": float(np.mean(accs)),
+            "test_acc_std": float(np.std(accs)),
+            "train_time": float(np.mean(times)),
+            "histories": histories
+        })
+        print(f"{label}: mean_acc={np.mean(accs):.4f} (std={np.std(accs):.4f}), mean_time={np.mean(times):.1f}s")
+
+    plot_bars_results(results, title="CNN2 - comparativa kernel sizes", filename="CNN_tarea2_kernels_comparativa.png")
+
+    results_sorted = sorted(results, key=lambda r: r["test_acc"], reverse=True)
+    best = results_sorted[0]
+    best_kernel_label = best["label"]
+    print(f"\nMejor kernel: {best_kernel_label} (acc = {best['test_acc']:.4f})")
+
+    best_k = tuple(map(int, best["label"].split("_")[1].split("x")))
+    final_model = build_cnn(input_shape=X_train.shape[1:], num_classes=Y_train.shape[1],
+                            filters_block1=16, filters_block2=32, kernel_size=best_k,
+                            activation="relu", kernel_initializer="he_normal", dense_units=100)
+    final_res = train_and_evaluate(final_model, X_train, Y_train, X_test, Y_test,
+                                   epochs=epochs, batch_size=batch_size,
+                                   validation_split=validation_split,
+                                   use_earlystopping=use_earlystopping,
+                                   es_patience=es_patience,
+                                   verbose=0)
+    y_true = np.argmax(Y_test, axis=1)
+    y_pred = np.argmax(final_res["model"].predict(X_test), axis=1)
+    plot_confusion_matrix(y_true, y_pred, labels=[str(i) for i in range(Y_test.shape[1])],
+                          title=f"CNN2 - Matriz confusión kernel {best_k[0]}x{best_k[1]}",
+                          filename=f"CNN_tarea2_confmat_best_kernel_{best_k[0]}x{best_k[1]}.png")
+
+    return results_sorted
+
+
+
+def build_cnn_advanced(input_shape=(32,32,3),
+                       num_classes=10,
+                       blocks: List[int] = [32, 64],
+                       convs_per_block: int = 2,
+                       kernel_size: Tuple[int,int] = (3,3),
+                       activation: str = 'relu',
+                       kernel_initializer: str = 'he_normal',
+                       weight_decay: float = 0.0,
+                       use_batchnorm: bool = True,
+                       dropout: float = 0.0,
+                       global_pool: bool = True,
+                       data_augmentation: bool = False) -> keras.models.Model:
+    reg = regularizers.l2(weight_decay) if weight_decay and weight_decay > 0 else None
+
+    inputs = layers.Input(shape=input_shape)
+    x = inputs
+
+    if data_augmentation:
+        aug = keras.Sequential([
+            layers.RandomFlip("horizontal"),
+            layers.RandomTranslation(0.08, 0.08),
+            layers.RandomRotation(0.02),
+        ], name="data_augmentation")
+        x = aug(x)
+
+    for filters in blocks:
+        for i in range(convs_per_block):
+            x = layers.Conv2D(filters, kernel_size, padding="same",
+                              kernel_initializer=kernel_initializer,
+                              kernel_regularizer=reg)(x)
+            if use_batchnorm:
+                x = layers.BatchNormalization()(x)
+            x = layers.Activation(activation)(x)
+        x = layers.MaxPooling2D((2,2))(x)
+
+    if global_pool:
+        x = layers.GlobalAveragePooling2D()(x)
+    else:
+        x = layers.Flatten()(x)
+
+    if dropout and dropout > 0.0:
+        x = layers.Dropout(dropout)(x)
+
+    x = layers.Dense(128, activation="relu", kernel_initializer="he_normal", kernel_regularizer=reg)(x)
+    if dropout and dropout > 0.0:
+        x = layers.Dropout(min(0.5, dropout*1.0))(x)
+
+    outputs = layers.Dense(num_classes, activation="softmax")(x)
+
+    model = keras.Model(inputs=inputs, outputs=outputs)
+    model.compile(optimizer=keras.optimizers.Adam(),
+                  loss="categorical_crossentropy",
+                  metrics=["accuracy"])
+    return model
+
+
+def tareaCNN3(repetitions: int = 3,
+              epochs: int = 80,
+              batch_size: int = 128,
+              validation_split: float = 0.1,
+              use_earlystopping: bool = True,
+              es_patience: int = 10,
+              verbose: int = 0):
+    X_train, Y_train, X_test, Y_test = load_preprocess_cnn()
+    num_classes = Y_train.shape[1]
+    input_shape = X_train.shape[1:]
+    results = []
+
+    class BuildParams(NamedTuple):
+        blocks: List[int]
+        convs_per_block: int = 2
+        kernel_size: Tuple[int, int] = (3, 3)
+        activation: str = 'relu'
+        kernel_initializer: str = 'he_normal'
+        weight_decay: float = 0.0
+        dropout: float = 0.0
+        batchnorm: bool = True
+        global_pool: bool = True
+        data_augmentation: bool = False
+
+    class TrainParams(NamedTuple):
+        epochs: int
+        batch_size: int
+        validation_split: float = 0.1
+        earlystopping: bool = True
+        es_patience: int = 10
+        verbose: int = 0
+
+    class ModelTemplate(NamedTuple):
+        buildparams: BuildParams
+        trainparams: TrainParams
+        const_buildparams: Tuple = (input_shape, num_classes)
+
+
+    candidates = [
+        ModelTemplate(
+            buildparams=BuildParams(
+                blocks=[32, 64],
+                weight_decay=1e-4,
+                dropout=0.30,
+                batchnorm=True,
+                global_pool=True,
+                data_augmentation=True
+            ),
+            trainparams=TrainParams(epochs=80, batch_size=128)
+        ),
+
+        ModelTemplate(
+            buildparams=BuildParams(
+                blocks=[32, 64, 128],
+                weight_decay=1e-4,
+                dropout=0.40,
+                batchnorm=True,
+                global_pool=True,
+                data_augmentation=True
+            ),
+            trainparams=TrainParams(epochs=80, batch_size=128)
+        ),
+
+        ModelTemplate(
+            buildparams=BuildParams(
+                blocks=[64, 128],
+                weight_decay=1e-4,
+                dropout=0.45,
+                batchnorm=False,
+                global_pool=True,
+                data_augmentation=True
+            ),
+            trainparams=TrainParams(epochs=80, batch_size=128)
+        ),
+
+        ModelTemplate(
+            buildparams=BuildParams(
+                blocks=[32, 64],
+                weight_decay=1e-5,
+                dropout=0.20,
+                batchnorm=True,
+                global_pool=True,
+                data_augmentation=False
+            ),
+            trainparams=TrainParams(epochs=80, batch_size=128)
+        ),
+
+        ModelTemplate(
+            buildparams=BuildParams(
+                blocks=[32, 64],
+                kernel_size=(5, 5),
+                weight_decay=1e-4,
+                dropout=0.30,
+                batchnorm=True,
+                global_pool=True,
+                data_augmentation=True
+            ),
+            trainparams=TrainParams(epochs=80, batch_size=128)
+        ),
+
+        ModelTemplate(
+            buildparams=BuildParams(
+                blocks=[32, 64, 128],
+                weight_decay=1e-4,
+                dropout=0.40,
+                batchnorm=True,
+                global_pool=False,
+                data_augmentation=True
+            ),
+            trainparams=TrainParams(epochs=80, batch_size=128)
+        ),
+    ]
+
+    for idx, c in enumerate(candidates):
+        bp, tp = c.buildparams, c.trainparams
+
+        label = (
+            f"{'+'.join(map(str, bp.blocks))}"
+            f"_k{bp.kernel_size[0]}"
+            f"_do{bp.dropout}"
+            f"_wd{bp.weight_decay}"
+            f"{'_bn' if bp.batchnorm else ''}"
+            f"{'_aug' if bp.data_augmentation else ''}"
+            f"{'_gap' if bp.global_pool else '_flat'}"
+        )
+
+        print(f"\nProbando candidato {idx}: {label}")
+
+        accs, times, raws = [], [], []
+
+        for rep in range(repetitions):
+            ensure_reproducibility(seed=1000 + rep)
+
+            model = build_cnn_advanced(
+                input_shape=input_shape,
+                num_classes=num_classes,
+                blocks=bp.blocks,
+                convs_per_block=bp.convs_per_block,
+                kernel_size=bp.kernel_size,
+                activation=bp.activation,
+                kernel_initializer=bp.kernel_initializer,
+                weight_decay=bp.weight_decay,
+                use_batchnorm=bp.batchnorm,
+                dropout=bp.dropout,
+                global_pool=bp.global_pool,
+                data_augmentation=bp.data_augmentation
+            )
+
+            callbacks = []
+            if tp.earlystopping:
+                callbacks.append(
+                    keras.callbacks.EarlyStopping(
+                        monitor="val_loss",
+                        patience=tp.es_patience,
+                        restore_best_weights=True,
+                        verbose=0
+                    )
+                )
+            callbacks.append(
+                keras.callbacks.ReduceLROnPlateau(
+                    monitor="val_loss",
+                    factor=0.5,
+                    patience=4,
+                    min_lr=1e-6,
+                    verbose=0
+                )
+            )
+
+            t0 = time.time()
+            history = model.fit(
+                X_train, Y_train,
+                validation_split=tp.validation_split,
+                epochs=tp.epochs,
+                batch_size=tp.batch_size,
+                callbacks=callbacks,
+                verbose=tp.verbose
+            )
+            train_time = time.time() - t0
+
+            test_loss, test_acc = model.evaluate(X_test, Y_test, verbose=0)
+
+            accs.append(test_acc)
+            times.append(train_time)
+            raws.append({
+                "model": model,
+                "history": history.history,
+                "test_acc": test_acc,
+                "train_time": train_time
+            })
+
+            if rep == 0:
+                plot_loss_acc(
+                    history.history,
+                    title=f"CNN3 - {label}",
+                    filename=f"CNN3_{label}.png"
+                )
+
+            tf.keras.backend.clear_session()
+
+        results.append({
+            "label": label,
+            "test_acc": float(np.mean(accs)),
+            "test_acc_std": float(np.std(accs)),
+            "train_time": float(np.mean(times)),
+            "raws": raws
+        })
+
+        print(f"{label}: acc={np.mean(accs):.4f}, std_deviation: {np.std(accs):.4f}")
+
+    results_sorted = sorted(results, key=lambda r: r["test_acc"], reverse=True)
+    plot_bars_results(results_sorted, title="CNN3 - Comparativa", filename="CNN3_comparativa.png")
+
+    best = results_sorted[0]
+    best_model = best["raws"][0]["model"]
+
+    y_true = np.argmax(Y_test, axis=1)
+    y_pred = np.argmax(best_model.predict(X_test), axis=1)
+    plot_confusion_matrix(
+        y_true, y_pred,
+        labels=[str(i) for i in range(num_classes)],
+        title=f"CNN3 - Confusión ({best['label']})",
+        filename="CNN3_confusion_best.png"
+    )
+
+    return results_sorted
+
+
 if __name__ == "__main__":
-    # WARNING: dejar comentadas las tareas que no se usan
+    #res = tareaMLP1()
+    #res = tareaMLP2()
+    #res = tareaMLP3()
+    #res = tareaMLP4()
+    #res = tareaMLP5()
+    #res = tareaMLP6()
+    #res = tareaMLP7()
 
-    # mlp1 = tareaMLP1()
-    #res2 = tareaMLP2()
-    #res3 = tareaMLP3()
-    #res4 = tareaMLP4()
-    #res5 = tareaMLP5()
-    #res6 = tareaMLP6()
-    res7 = tareaMLP7()
-
-    #TODO: Aquí actividades de CNN
+    #res = tareaCNN1()
+    #res = tareaCNN2()
+    res = tareaCNN3()
